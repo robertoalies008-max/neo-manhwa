@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, Mail, User as UserIcon, Shield, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Lock, Mail, User as UserIcon, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { UserRole } from '../types';
 import {
   validateEmail,
@@ -44,7 +44,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [selectedQuickRole, setSelectedQuickRole] = useState<UserRole>('user');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -150,8 +149,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!validateAll()) return;
 
     setIsSubmitting(true);
+    
+    // Auto-detect role based on specific emails for demo purposes
+    let finalRole: UserRole = 'user';
+    if (mode === 'signin') {
+      if (email === 'admin@neomanhwa.internal') finalRole = 'admin';
+      else if (email === 'mod@neomanhwa.org') finalRole = 'moderator';
+      else if (email === 'scribe@neomanhwa.org') finalRole = 'contributor';
+    }
+    
     setTimeout(() => {
-      onSubmit(mode, selectedQuickRole);
+      onSubmit(mode, finalRole);
       setIsSubmitting(false);
     }, 300);
   };
