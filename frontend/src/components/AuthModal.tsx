@@ -202,42 +202,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Quick RBAC Role Picker for Demo */}
-        <div style={{
-          backgroundColor: 'var(--bg-elevated)',
-          border: '1px solid var(--border-medium)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '0.75rem',
-          marginBottom: '1.25rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 700, color: '#9aa4b8', textTransform: 'uppercase' }}>
-            <Shield size={14} color="#60a5fa" />
-            <span>Demo Persona Selector</span>
-            <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#64748b', fontWeight: 500 }}>Dev-only</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem' }}>
-            {(['user', 'contributor', 'moderator', 'admin'] as UserRole[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setSelectedQuickRole(r)}
-                style={{
-                  padding: '0.4rem 0.2rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  textTransform: 'capitalize',
-                  borderRadius: 'var(--radius-xs)',
-                  border: selectedQuickRole === r ? '1px solid #3b82f6' : '1px solid #232838',
-                  backgroundColor: selectedQuickRole === r ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                  color: selectedQuickRole === r ? '#ffffff' : '#828fa6',
-                  cursor: 'pointer'
-                }}
-              >
-                {r === 'admin' ? 'Admin' : r}
-              </button>
-            ))}
-          </div>
-        </div>
+
 
         {/* Rate limit error banner */}
         {rateLimitError && (
