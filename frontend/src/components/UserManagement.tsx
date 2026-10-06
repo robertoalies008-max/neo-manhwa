@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Shield, Trash2, Ban, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { Shield, Trash2, Ban, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
 interface UserManagementProps {

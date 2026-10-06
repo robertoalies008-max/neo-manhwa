@@ -3,13 +3,13 @@ import { Search, Shield, LogIn, LogOut, UserPlus, BookOpen, Layers, ShieldAlert,
 import type { UserRole, Manhwa } from '../types';
 
 interface NavbarProps {
-  activeTab: 'catalog' | 'library' | 'contributor' | 'moderation' | 'audit';
+  activeTab: 'catalog' | 'library' | 'contributor' | 'moderation' | 'audit' | 'users';
   currentRole: UserRole;
   currentUsername: string;
   searchQuery: string;
   favoritesCount: number;
   manhwaList: Manhwa[];
-  onSelectTab: (tab: 'catalog' | 'library' | 'contributor' | 'moderation' | 'audit') => void;
+  onSelectTab: (tab: 'catalog' | 'library' | 'contributor' | 'moderation' | 'audit' | 'users') => void;
   onSearchChange: (q: string) => void;
   onRoleSwitch: (role: UserRole) => void;
   onOpenAuth: (mode: 'signin' | 'signup') => void;
