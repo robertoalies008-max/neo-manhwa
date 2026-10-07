@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-07T13:35:07.696Z",
+  "timestamp": "2026-10-07T13:38:13.204Z",
   "scanDurationMs": 4,
   "totalTests": 24,
   "passedCount": 24,
@@ -49,7 +49,7 @@
       "passed": true,
       "expectedBehavior": "Flagged as suspicious SQLi and rejected by validation",
       "observedBehavior": "Defended: Neutralized successfully",
-      "latencyMs": 0.63,
+      "latencyMs": 0.68,
       "mitigation": "Parameterized SQL statements and heuristic input detection filter."
     },
     {
@@ -61,7 +61,7 @@
       "passed": true,
       "expectedBehavior": "Flagged by SQL comment pattern detector (--)",
       "observedBehavior": "Defended: Neutralized successfully",
-      "latencyMs": 0.14,
+      "latencyMs": 0.15,
       "mitigation": "Detect and neutralize SQL comment markers in raw user input."
     },
     {
@@ -73,7 +73,7 @@
       "passed": true,
       "expectedBehavior": "Flagged by stacked query detector (DROP TABLE) and blocked",
       "observedBehavior": "Defended: Neutralized successfully",
-      "latencyMs": 0.06,
+      "latencyMs": 0.07,
       "mitigation": "Prohibit stacked queries and strip multi-statement delimiters."
     },
     {
@@ -133,7 +133,7 @@
       "passed": true,
       "expectedBehavior": "All <script> tags and inner code stripped",
       "observedBehavior": "Defended: Neutralized successfully",
-      "latencyMs": 0.45,
+      "latencyMs": 0.43,
       "mitigation": "Multi-pass HTML tag stripper (sanitizeText)."
     },
     {
@@ -193,7 +193,7 @@
       "passed": true,
       "expectedBehavior": "HTML metacharacters (<, >, \", &) converted to safe entities",
       "observedBehavior": "Defended: Neutralized successfully",
-      "latencyMs": 0.07,
+      "latencyMs": 0.08,
       "mitigation": "Always escape dynamic values rendered into raw DOM."
     },
     {
@@ -253,7 +253,7 @@
       "passed": true,
       "expectedBehavior": "Payload exceeding max bounds safely rejected with length error",
       "observedBehavior": "Defended: Safely constrained",
-      "latencyMs": 0.98,
+      "latencyMs": 1.07,
       "mitigation": "Hard maximum character length checks prior to processing."
     },
     {
@@ -313,7 +313,7 @@
       "passed": true,
       "expectedBehavior": "RLS configured with explicit granular policies per table",
       "observedBehavior": "Defended: Schema complies with security standards",
-      "latencyMs": 0.01,
+      "latencyMs": 0.02,
       "mitigation": "ENABLE ROW LEVEL SECURITY with SELECT/INSERT/UPDATE/DELETE policies."
     },
     {
