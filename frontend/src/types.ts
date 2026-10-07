@@ -128,4 +128,11 @@ export interface ContributorDraft {
   total_chapters: number;
   submission_date: string;
   moderation_status: 'pending' | 'approved' | 'rejected';
+  cover_image_url?: string;
+  authors?: string[];
+  artists?: string[];
+  release_year?: number;
+  api_source?: 'mangadex' | 'anilist' | 'manual';
+  api_id?: string;
 }
+

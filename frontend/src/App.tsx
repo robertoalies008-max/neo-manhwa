@@ -19,14 +19,15 @@ import { AuthModal } from './components/AuthModal';
 import { ReportModal } from './components/ReportModal';
 import { LoadingScreen } from './components/LoadingScreen';
 import { DevOpsSecurityModal } from './components/DevOpsSecurityModal';
+import { ApiManhwaImporterModal } from './components/ApiManhwaImporterModal';
 import { ToastContainer, type ToastMessage } from './components/Toast';
 import { isSupabaseConfigured } from './lib/supabase';
-import { canModerate, sanitizeText } from './lib/validation';
-import { fetchManhwaFromDatabase, fetchUserLibrary, addCommentToDatabase, fetchComments } from './services/supabaseService';
+import { canModerate, sanitizeText, canContribute } from './lib/validation';
+import { fetchManhwaFromDatabase, fetchUserLibrary, addCommentToDatabase, fetchComments, syncManhwaToDatabase } from './services/supabaseService';
 import { fetchAniListReviews, searchAniListIdByTitle } from './services/anilistService';
 import { fetchMangaUpdatesReviews } from './services/mangaUpdatesService';
 import { getCurrentWeekInfo, enrichWithWeeklyRoster, syncWeeklyDropsToSupabase, getWeeklyDrops } from './services/weeklyRosterService';
-import { BookOpen, X, Sparkles, Star, ChevronRight, Database, MessageSquare, Flame } from 'lucide-react';
+import { BookOpen, X, Sparkles, Star, ChevronRight, Database, MessageSquare, Flame, Plus } from 'lucide-react';
 
 export function App() {
   // Security & Persona State
@@ -42,6 +43,8 @@ export function App() {
   const [drafts, setDrafts] = useState<ContributorDraft[]>(INITIAL_CONTRIBUTOR_DRAFTS);
   const [usersList, setUsersList] = useState<User[]>(INITIAL_USER_LIST);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isApiImporterOpen, setIsApiImporterOpen] = useState(false);
+  const [prefilledManhwaForDraft, setPrefilledManhwaForDraft] = useState<Manhwa | null>(null);
 
   // In-app Toasts (hoisted for early availability)
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -472,6 +475,26 @@ export function App() {
     addToast('Draft Proposed', 'Sent to the Moderator Queue for verification.', 'success');
   };
 
+  const handleAddManhwaDirectly = (manhwa: Manhwa) => {
+    // Check if duplicate title already exists
+    if (manhwaList.some(m => m.id === manhwa.id || m.title.toLowerCase().trim() === manhwa.title.toLowerCase().trim())) {
+      addToast('Already in Catalog', `"${manhwa.title}" is already present in the catalog.`, 'info');
+      return;
+    }
+
+    setManhwaList(prev => [manhwa, ...prev]);
+    logAuditAction('MANHWA_IMPORTED_API', 'Manhwa', manhwa.id, {
+      title: manhwa.title,
+      source: manhwa.id.startsWith('mangadex') ? 'MangaDex' : 'AniList',
+      imported_by: currentUser.username,
+    });
+    addToast('Series Published', `"${manhwa.title}" added directly to live catalog!`, 'success');
+
+    if (isSupabaseConfigured) {
+      syncManhwaToDatabase([manhwa]).catch(err => console.error('Supabase sync error:', err));
+    }
+  };
+
   const handleApproveDraft = (draftId: string) => {
     const draft = drafts.find(d => d.id === draftId);
     if (!draft) return;
@@ -480,22 +503,24 @@ export function App() {
     const isoNow = new Date(draftTimestamp).toISOString();
 
     const newManhwa: Manhwa = {
-      id: `m-${draftTimestamp}`,
+      id: draft.api_id || `m-${draftTimestamp}`,
       title: draft.title,
       alternative_titles: {
         hangul: draft.hangul,
       },
       synopsis: draft.synopsis,
-      authors: ['Community Contributor'],
-      artists: ['Pending Attribution'],
-      cover_image_url: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx119257-Pi21aq3ey9GG.jpg',
+      authors: draft.authors && draft.authors.length > 0 ? draft.authors : ['Community Contributor'],
+      artists: draft.artists && draft.artists.length > 0 ? draft.artists : ['Pending Attribution'],
+      cover_image_url: draft.cover_image_url || 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx119257-Pi21aq3ey9GG.jpg',
       format: draft.format,
       status: draft.status,
       genres: draft.genres,
       tropes: ['New Addition'],
-      release_year: 2026,
+      release_year: draft.release_year || 2026,
       total_chapters: draft.total_chapters,
-      official_links: [],
+      official_links: draft.api_source === 'mangadex' && draft.api_id
+        ? [{ platform: 'MangaDex', url: `https://mangadex.org/title/${draft.api_id.replace('mangadex-', '')}` }]
+        : [],
       is_published: true,
       rating_avg: 5.0,
       rating_count: 1,
@@ -508,6 +533,10 @@ export function App() {
     setDrafts(prev => prev.map(d => d.id === draftId ? { ...d, moderation_status: 'approved' } : d));
     logAuditAction('DRAFT_APPROVED_PUBLISHED', 'Manhwa', newManhwa.id, { title: draft.title });
     addToast('Draft Approved', `${draft.title} is now published in the official catalog.`, 'success');
+
+    if (isSupabaseConfigured) {
+      syncManhwaToDatabase([newManhwa]).catch(err => console.error('Supabase sync error:', err));
+    }
   };
 
   const handleRejectDraft = (draftId: string) => {
@@ -664,6 +693,7 @@ export function App() {
         onLogout={handleLogout}
         onSelectManhwa={setSelectedManhwa}
         onOpenSecurityTester={() => setIsSecurityModalOpen(true)}
+        onOpenApiImporter={() => setIsApiImporterOpen(true)}
       />
 
       {/* Main Tab Content */}
@@ -746,11 +776,36 @@ export function App() {
 
             {/* HORIZONTAL BROWSE-BY-GENRE PILL BAR */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.75rem', color: '#828fa6', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <Sparkles size={13} color="#3b82f6" />
-                  Explore by Genre (Click to filter)
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#828fa6', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Sparkles size={13} color="#3b82f6" />
+                    Explore by Genre (Click to filter)
+                  </span>
+                  {canContribute(currentRole) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsApiImporterOpen(true)}
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(6, 182, 212, 0.2) 100%)',
+                        border: '1px solid rgba(249, 115, 22, 0.4)',
+                        borderRadius: '20px',
+                        padding: '2px 9px',
+                        color: '#fdba74',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                      }}
+                      title="Search MangaDex & AniList to add new manhwa"
+                    >
+                      <Plus size={11} color="#f97316" />
+                      <span>Search & Add (MangaDex & AniList)</span>
+                    </button>
+                  )}
+                </div>
                 {hasActiveFilters && (
                   <button
                     type="button"
@@ -1104,6 +1159,9 @@ export function App() {
             currentUserId={currentUser.id}
             currentUsername={currentUser.username}
             onProposeDraft={handleProposeDraft}
+            onOpenApiImporter={() => setIsApiImporterOpen(true)}
+            onAddDirectly={handleAddManhwaDirectly}
+            prefilledManhwa={prefilledManhwaForDraft}
           />
         )}
 
@@ -1186,6 +1244,23 @@ export function App() {
       <DevOpsSecurityModal
         isOpen={isSecurityModalOpen}
         onClose={() => setIsSecurityModalOpen(false)}
+      />
+
+      {/* Modal: MangaDex & AniList Importer */}
+      <ApiManhwaImporterModal
+        isOpen={isApiImporterOpen}
+        onClose={() => setIsApiImporterOpen(false)}
+        currentRole={currentRole}
+        currentUserId={currentUser.id}
+        currentUsername={currentUser.username}
+        existingTitles={manhwaList.map((m) => m.title)}
+        onAddDirectly={handleAddManhwaDirectly}
+        onProposeDraft={handleProposeDraft}
+        onSelectForManualForm={(m) => {
+          setPrefilledManhwaForDraft(m);
+          setActiveTab('contributor');
+          setIsApiImporterOpen(false);
+        }}
       />
 
 

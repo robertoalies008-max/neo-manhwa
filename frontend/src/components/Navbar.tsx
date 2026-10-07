@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Shield, LogIn, LogOut, UserPlus, BookOpen, Layers, ShieldAlert, Sparkles, X, Star } from 'lucide-react';
+import { Search, Shield, LogIn, LogOut, UserPlus, BookOpen, Layers, ShieldAlert, Sparkles, X, Star, Plus } from 'lucide-react';
 import type { UserRole, Manhwa } from '../types';
 
 interface NavbarProps {
@@ -16,6 +16,7 @@ interface NavbarProps {
   onLogout: () => void;
   onSelectManhwa: (m: Manhwa) => void;
   onOpenSecurityTester?: () => void;
+  onOpenApiImporter?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onSelectManhwa,
   onOpenSecurityTester,
+  onOpenApiImporter,
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -302,6 +304,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                 style={{ color: activeTab === 'contributor' ? '#8b5cf6' : 'var(--text-secondary)' }}
               >
                 Contributor
+              </button>
+            )}
+
+            {(currentRole === 'contributor' || currentRole === 'moderator' || currentRole === 'admin') && onOpenApiImporter && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={onOpenApiImporter}
+                title="Search MangaDex and AniList APIs to import or propose manhwa"
+                style={{
+                  color: '#f97316',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                  border: '1px solid rgba(249, 115, 22, 0.25)',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                }}
+              >
+                <Plus size={13} color="#f97316" />
+                <span>+ Add Series</span>
               </button>
             )}
 
