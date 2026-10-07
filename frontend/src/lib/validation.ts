@@ -115,7 +115,9 @@ export function detectSqlInjection(input: string): SqlScanResult {
     },
     {
       name: 'SQL Comment Sequence / Inline Truncation',
-      pattern: /(--|\/\*[\s\S]*?\*\/|#\s)/,
+      // Detects SQL comment injection: quotes/semicolons followed by --, isolated -- followed by commands, /* */ or #
+      // Prevents false positives on markdown horizontal rules (---) or typography dashes in synopses
+      pattern: /(?:['";`]\s*--|(?<!-)--(?!\-)(?:\s+[a-zA-Z0-9_\*]|\s*$)|\/\*[\s\S]*?\*\/|#\s+)/i,
     },
   ];
 

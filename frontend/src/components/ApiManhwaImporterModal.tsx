@@ -23,6 +23,7 @@ interface ApiManhwaImporterModalProps {
   currentUserId: string;
   currentUsername: string;
   existingTitles: string[];
+  pendingDraftTitles?: string[];
   onAddDirectly?: (manhwa: Manhwa) => void;
   onProposeDraft?: (draft: Omit<ContributorDraft, 'id' | 'submission_date' | 'moderation_status'>) => void;
   onSelectForManualForm?: (manhwa: Manhwa) => void;
@@ -38,6 +39,7 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
   currentUserId,
   currentUsername,
   existingTitles,
+  pendingDraftTitles = [],
   onAddDirectly,
   onProposeDraft,
   onSelectForManualForm,
@@ -49,11 +51,17 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Manhwa[]>([]);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
+  const [proposedIds, setProposedIds] = useState<Set<string>>(new Set());
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
   const existingTitlesNormalized = useMemo(() => {
     return new Set(existingTitles.map((t) => t.toLowerCase().trim()));
   }, [existingTitles]);
+
+  const pendingDraftsNormalized = useMemo(() => {
+    return new Set((pendingDraftTitles || []).map((t) => t.toLowerCase().trim()));
+  }, [pendingDraftTitles]);
 
   // Load trending / popular series on open
   const loadFeatured = async () => {
@@ -176,14 +184,24 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
 
   const handleAddDirectly = (manhwa: Manhwa) => {
     if (!onAddDirectly) return;
+    const isAlreadyIn = existingTitlesNormalized.has(manhwa.title.toLowerCase().trim()) || importedIds.has(manhwa.id);
+    if (processingId === manhwa.id || isAlreadyIn) return;
+
+    setProcessingId(manhwa.id);
     onAddDirectly(manhwa);
     setImportedIds((prev) => new Set(prev).add(manhwa.id));
     setActionSuccessMessage(`Successfully added "${manhwa.title}" directly to live catalog!`);
-    setTimeout(() => setActionSuccessMessage(null), 4000);
+    setTimeout(() => setActionSuccessMessage(null), 3000);
+    setTimeout(() => setProcessingId(null), 350);
   };
 
   const handleProposeDraft = (manhwa: Manhwa) => {
     if (!onProposeDraft) return;
+    const isAlreadyIn = existingTitlesNormalized.has(manhwa.title.toLowerCase().trim()) || importedIds.has(manhwa.id);
+    const isAlreadyProp = pendingDraftsNormalized.has(manhwa.title.toLowerCase().trim()) || proposedIds.has(manhwa.id);
+    if (processingId === manhwa.id || isAlreadyProp || isAlreadyIn) return;
+
+    setProcessingId(manhwa.id);
     onProposeDraft({
       contributor_id: currentUserId,
       contributor_name: currentUsername,
@@ -201,9 +219,10 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
       api_source: manhwa.id.startsWith('mangadex') ? 'mangadex' : 'anilist',
       api_id: manhwa.id,
     });
-    setImportedIds((prev) => new Set(prev).add(manhwa.id));
+    setProposedIds((prev) => new Set(prev).add(manhwa.id));
     setActionSuccessMessage(`Draft proposal for "${manhwa.title}" dispatched to Moderator Queue!`);
-    setTimeout(() => setActionSuccessMessage(null), 4000);
+    setTimeout(() => setActionSuccessMessage(null), 3000);
+    setTimeout(() => setProcessingId(null), 350);
   };
 
   const handleLoadIntoForm = (manhwa: Manhwa) => {
@@ -630,8 +649,10 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
               }}
             >
               {filteredResults.map((m) => {
-                const isAlreadyInCatalog = existingTitlesNormalized.has(m.title.toLowerCase().trim());
-                const isImportedInSession = importedIds.has(m.id);
+                const isAlreadyInCatalog = existingTitlesNormalized.has(m.title.toLowerCase().trim()) || importedIds.has(m.id);
+                const isAlreadyProposed = pendingDraftsNormalized.has(m.title.toLowerCase().trim()) || proposedIds.has(m.id);
+                const isProcessing = processingId === m.id;
+                const isImportedInSession = importedIds.has(m.id) || proposedIds.has(m.id);
                 const isMangaDex = m.id.startsWith('mangadex');
 
                 return (
@@ -761,6 +782,11 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
                             <Check size={11} /> In Catalog
                           </div>
                         )}
+                        {isAlreadyProposed && !isAlreadyInCatalog && (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '4px', fontSize: '0.68rem', color: '#c084fc', fontWeight: 600 }}>
+                            <Check size={11} /> In Queue
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -871,43 +897,59 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleProposeDraft(m)}
+                              disabled={isProcessing || isAlreadyProposed || isAlreadyInCatalog}
                               style={{
                                 padding: '5px 9px',
                                 borderRadius: '6px',
-                                backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                                backgroundColor: isAlreadyProposed ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.15)',
                                 border: '1px solid rgba(139, 92, 246, 0.35)',
-                                color: '#c084fc',
+                                color: isAlreadyProposed || isAlreadyInCatalog ? '#64748b' : '#c084fc',
                                 fontSize: '0.72rem',
                                 fontWeight: 600,
-                                cursor: 'pointer',
+                                cursor: isProcessing || isAlreadyProposed || isAlreadyInCatalog ? 'not-allowed' : 'pointer',
+                                opacity: isAlreadyProposed || isAlreadyInCatalog ? 0.6 : 1,
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '4px',
                               }}
                             >
-                              <Send size={11} />
-                              <span>Draft</span>
+                              {isProcessing ? (
+                                <Loader2 size={11} className="spin-animation" />
+                              ) : isAlreadyProposed ? (
+                                <Check size={11} />
+                              ) : (
+                                <Send size={11} />
+                              )}
+                              <span>{isAlreadyProposed ? 'In Queue' : isAlreadyInCatalog ? 'Cataloged' : 'Draft'}</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => handleAddDirectly(m)}
+                              disabled={isProcessing || isAlreadyInCatalog}
                               style={{
                                 padding: '5px 12px',
                                 borderRadius: '6px',
-                                backgroundColor: '#2563eb',
-                                border: '1px solid #3b82f6',
+                                backgroundColor: isAlreadyInCatalog ? '#10b981' : '#2563eb',
+                                border: isAlreadyInCatalog ? '1px solid #059669' : '1px solid #3b82f6',
                                 color: '#ffffff',
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
-                                cursor: 'pointer',
+                                cursor: isProcessing || isAlreadyInCatalog ? 'not-allowed' : 'pointer',
+                                opacity: isAlreadyInCatalog ? 0.8 : 1,
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)',
+                                boxShadow: isAlreadyInCatalog ? 'none' : '0 2px 8px rgba(37, 99, 235, 0.4)',
                               }}
                             >
-                              <Plus size={13} />
-                              <span>Publish to Catalog</span>
+                              {isProcessing ? (
+                                <Loader2 size={13} className="spin-animation" />
+                              ) : isAlreadyInCatalog ? (
+                                <Check size={13} />
+                              ) : (
+                                <Plus size={13} />
+                              )}
+                              <span>{isAlreadyInCatalog ? 'In Catalog' : 'Publish to Catalog'}</span>
                             </button>
                           </div>
                         ) : (
@@ -915,23 +957,33 @@ export const ApiManhwaImporterModal: React.FC<ApiManhwaImporterModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleProposeDraft(m)}
+                            disabled={isProcessing || isAlreadyProposed || isAlreadyInCatalog}
                             style={{
                               padding: '5px 12px',
                               borderRadius: '6px',
-                              backgroundColor: '#8b5cf6',
-                              border: '1px solid #a855f7',
+                              backgroundColor: isAlreadyInCatalog ? '#10b981' : isAlreadyProposed ? '#475569' : '#8b5cf6',
+                              border: isAlreadyInCatalog ? '1px solid #059669' : isAlreadyProposed ? '1px solid #64748b' : '1px solid #a855f7',
                               color: '#ffffff',
                               fontSize: '0.72rem',
                               fontWeight: 700,
-                              cursor: 'pointer',
+                              cursor: isProcessing || isAlreadyProposed || isAlreadyInCatalog ? 'not-allowed' : 'pointer',
+                              opacity: isAlreadyProposed || isAlreadyInCatalog ? 0.75 : 1,
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px',
-                              boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+                              boxShadow: isAlreadyProposed || isAlreadyInCatalog ? 'none' : '0 2px 8px rgba(139, 92, 246, 0.3)',
                             }}
                           >
-                            <Send size={12} />
-                            <span>Propose to Queue</span>
+                            {isProcessing ? (
+                              <Loader2 size={12} className="spin-animation" />
+                            ) : isAlreadyInCatalog ? (
+                              <Check size={12} />
+                            ) : isAlreadyProposed ? (
+                              <Check size={12} />
+                            ) : (
+                              <Send size={12} />
+                            )}
+                            <span>{isAlreadyInCatalog ? 'In Catalog' : isAlreadyProposed ? 'In Queue' : 'Propose to Queue'}</span>
                           </button>
                         )}
                       </div>

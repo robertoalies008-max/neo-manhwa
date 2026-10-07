@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle,
   FileText,
@@ -8,6 +8,7 @@ import {
   Database,
   Plus,
   Loader2,
+  Check,
 } from 'lucide-react';
 import type { ContributorDraft, ManhwaFormat, ManhwaStatus, UserRole, Manhwa } from '../types';
 import {
@@ -26,6 +27,7 @@ interface ContributorHubProps {
   currentRole: UserRole;
   currentUserId: string;
   currentUsername: string;
+  existingTitles?: string[];
   onProposeDraft: (draft: Omit<ContributorDraft, 'id' | 'submission_date' | 'moderation_status'>) => void;
   onOpenApiImporter?: () => void;
   onAddDirectly?: (manhwa: Manhwa) => void;
@@ -37,6 +39,7 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
   currentRole,
   currentUserId,
   currentUsername,
+  existingTitles = [],
   onProposeDraft,
   onOpenApiImporter,
   onAddDirectly,
@@ -58,6 +61,7 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
   const [apiId, setApiId] = useState<string | undefined>(undefined);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitCooldown, setSubmitCooldown] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rateLimitError, setRateLimitError] = useState('');
 
@@ -68,6 +72,30 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
   const [isSearchingApi, setIsSearchingApi] = useState(false);
   const [apiSearchError, setApiSearchError] = useState<string | null>(null);
   const [justImportedId, setJustImportedId] = useState<string | null>(null);
+  const [proposedApiIds, setProposedApiIds] = useState<Set<string>>(new Set());
+  const [apiProcessingId, setApiProcessingId] = useState<string | null>(null);
+
+  // Normalized title sets for fast duplicate prevention
+  const pendingDraftTitles = useMemo(() => {
+    return new Set(
+      drafts
+        .filter((d) => d.moderation_status === 'pending')
+        .map((d) => d.title.toLowerCase().trim())
+    );
+  }, [drafts]);
+
+  const catalogTitles = useMemo(() => {
+    return new Set(existingTitles.map((t) => t.toLowerCase().trim()));
+  }, [existingTitles]);
+
+  // Cooldown countdown timer for anti-spam protection
+  useEffect(() => {
+    if (submitCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setSubmitCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [submitCooldown]);
 
   // If a prefilled manhwa is passed in (e.g. from modal)
   useEffect(() => {
@@ -153,13 +181,24 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
   };
 
   const handleQuickProposeFromApi = (m: Manhwa) => {
-    // Check rate limit for instant propose
-    if (!checkRateLimit(`draft-submit-${currentUserId}`, 3, 10 * 60_000)) {
-      const cooldown = getRateLimitCooldown(`draft-submit-${currentUserId}`, 10 * 60_000);
+    const norm = m.title.toLowerCase().trim();
+    if (
+      apiProcessingId === m.id ||
+      proposedApiIds.has(m.id) ||
+      pendingDraftTitles.has(norm) ||
+      catalogTitles.has(norm)
+    ) {
+      return;
+    }
+
+    // Anti-spam rate limiting: max 5 draft submissions per 2 minutes
+    if (!checkRateLimit(`draft-submit-${currentUserId}`, 5, 2 * 60_000)) {
+      const cooldown = getRateLimitCooldown(`draft-submit-${currentUserId}`, 2 * 60_000);
       setRateLimitError(`Too many submissions. Please wait ${cooldown}s before trying again.`);
       return;
     }
     setRateLimitError('');
+    setApiProcessingId(m.id);
 
     onProposeDraft({
       contributor_id: currentUserId,
@@ -178,14 +217,23 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
       api_source: m.id.startsWith('mangadex') ? 'mangadex' : 'anilist',
       api_id: m.id,
     });
+    setProposedApiIds((prev) => new Set(prev).add(m.id));
     setJustImportedId(m.id);
+    setTimeout(() => setApiProcessingId(null), 350);
   };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    const norm = title.trim().toLowerCase();
+    if (pendingDraftTitles.has(norm)) {
+      newErrors.title = 'A proposal for this title is already pending in the moderation queue.';
+    } else if (catalogTitles.has(norm)) {
+      newErrors.title = 'This title is already published in the official catalog.';
+    }
+
     const titleResult = validateTitle(title);
-    if (!titleResult.valid) newErrors.title = titleResult.error!;
+    if (!titleResult.valid && !newErrors.title) newErrors.title = titleResult.error!;
 
     const synopsisResult = validateSynopsis(synopsis);
     if (!synopsisResult.valid) newErrors.synopsis = synopsisResult.error!;
@@ -204,10 +252,11 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || submitCooldown > 0) return;
 
-    // Rate limit: max 3 draft submissions per 10 minutes
-    if (!checkRateLimit(`draft-submit-${currentUserId}`, 3, 10 * 60_000)) {
-      const cooldown = getRateLimitCooldown(`draft-submit-${currentUserId}`, 10 * 60_000);
+    // Rate limit: max 5 draft submissions per 2 minutes
+    if (!checkRateLimit(`draft-submit-${currentUserId}`, 5, 2 * 60_000)) {
+      const cooldown = getRateLimitCooldown(`draft-submit-${currentUserId}`, 2 * 60_000);
       setRateLimitError(`Too many submissions. Please wait ${cooldown}s before trying again.`);
       return;
     }
@@ -216,6 +265,7 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
     if (!validate()) return;
 
     setIsSubmitting(true);
+    setSubmitCooldown(4);
     setTimeout(() => {
       onProposeDraft({
         contributor_id: currentUserId,
@@ -259,7 +309,7 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
             <span className="badge badge-role-contributor">Contributor & Admin Workspace</span>
-            <span style={{ fontSize: '0.72rem', color: '#828fa6' }}>• MangaDex + AniList Enabled</span>
+            <span style={{ fontSize: '0.72rem', color: '#828fa6' }}>• Anti-Spam Protected</span>
           </div>
           <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ffffff' }}>Metadata & Catalog Proposal Hub</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
@@ -443,7 +493,10 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px', overflowY: 'auto', paddingRight: '4px' }}>
                   {apiResults.map((m) => {
                     const isMangaDex = m.id.startsWith('mangadex');
-                    const isImported = justImportedId === m.id;
+                    const normTitle = m.title.toLowerCase().trim();
+                    const isAlreadyInCat = catalogTitles.has(normTitle) || justImportedId === m.id;
+                    const isAlreadyInQueue = pendingDraftTitles.has(normTitle) || proposedApiIds.has(m.id);
+                    const isApiProcessing = apiProcessingId === m.id;
 
                     return (
                       <div
@@ -453,7 +506,7 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
                           gap: '0.75rem',
                           padding: '0.75rem',
                           backgroundColor: '#0d111d',
-                          border: isImported ? '1px solid #10b981' : '1px solid #1a2233',
+                          border: isAlreadyInCat ? '1px solid #10b981' : isAlreadyInQueue ? '1px solid #8b5cf6' : '1px solid #1a2233',
                           borderRadius: '8px',
                         }}
                       >
@@ -523,47 +576,68 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
                             {currentRole === 'admin' && onAddDirectly ? (
                               <button
                                 type="button"
+                                disabled={isApiProcessing || isAlreadyInCat}
                                 onClick={() => {
+                                  if (isApiProcessing || isAlreadyInCat) return;
+                                  setApiProcessingId(m.id);
                                   onAddDirectly(m);
                                   setJustImportedId(m.id);
+                                  setTimeout(() => setApiProcessingId(null), 350);
                                 }}
                                 style={{
                                   padding: '3px 8px',
                                   fontSize: '0.7rem',
                                   borderRadius: '4px',
-                                  backgroundColor: '#2563eb',
-                                  border: '1px solid #3b82f6',
+                                  backgroundColor: isAlreadyInCat ? '#10b981' : '#2563eb',
+                                  border: isAlreadyInCat ? '1px solid #059669' : '1px solid #3b82f6',
                                   color: '#ffffff',
                                   fontWeight: 700,
-                                  cursor: 'pointer',
+                                  cursor: isApiProcessing || isAlreadyInCat ? 'not-allowed' : 'pointer',
+                                  opacity: isAlreadyInCat ? 0.8 : 1,
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: '3px',
                                 }}
                               >
-                                <Plus size={11} />
-                                <span>Add to Catalog</span>
+                                {isApiProcessing ? (
+                                  <Loader2 size={11} className="spin-animation" />
+                                ) : isAlreadyInCat ? (
+                                  <Check size={11} />
+                                ) : (
+                                  <Plus size={11} />
+                                )}
+                                <span>{isAlreadyInCat ? 'In Catalog' : 'Add to Catalog'}</span>
                               </button>
                             ) : (
                               <button
                                 type="button"
+                                disabled={isApiProcessing || isAlreadyInQueue || isAlreadyInCat}
                                 onClick={() => handleQuickProposeFromApi(m)}
                                 style={{
                                   padding: '3px 8px',
                                   fontSize: '0.7rem',
                                   borderRadius: '4px',
-                                  backgroundColor: '#8b5cf6',
-                                  border: '1px solid #a855f7',
+                                  backgroundColor: isAlreadyInCat ? '#10b981' : isAlreadyInQueue ? '#475569' : '#8b5cf6',
+                                  border: isAlreadyInCat ? '1px solid #059669' : isAlreadyInQueue ? '1px solid #64748b' : '1px solid #a855f7',
                                   color: '#ffffff',
                                   fontWeight: 700,
-                                  cursor: 'pointer',
+                                  cursor: isApiProcessing || isAlreadyInQueue || isAlreadyInCat ? 'not-allowed' : 'pointer',
+                                  opacity: isAlreadyInQueue || isAlreadyInCat ? 0.75 : 1,
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: '3px',
                                 }}
                               >
-                                <Send size={10} />
-                                <span>Propose Draft</span>
+                                {isApiProcessing ? (
+                                  <Loader2 size={10} className="spin-animation" />
+                                ) : isAlreadyInCat ? (
+                                  <Check size={10} />
+                                ) : isAlreadyInQueue ? (
+                                  <Check size={10} />
+                                ) : (
+                                  <Send size={10} />
+                                )}
+                                <span>{isAlreadyInCat ? 'In Catalog' : isAlreadyInQueue ? 'In Queue' : 'Propose Draft'}</span>
                               </button>
                             )}
                           </div>
@@ -577,7 +651,7 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
                   <Database size={28} color="#334155" style={{ margin: '0 auto 0.5rem auto' }} />
                   <div>Type a series title above to query live records from MangaDex and AniList.</div>
                   <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: '#475569' }}>
-                    Tip: You can instantly propose series or populate the manual form with one click.
+                    Anti-spam protection actively limits rapid consecutive draft submissions.
                   </div>
                 </div>
               )}
@@ -731,11 +805,32 @@ export const ContributorHub: React.FC<ContributorHubProps> = ({
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={isSubmitting}
-                style={{ marginTop: '0.5rem', backgroundColor: '#8b5cf6', borderColor: '#7c3aed', opacity: isSubmitting ? 0.7 : 1 }}
+                disabled={isSubmitting || submitCooldown > 0}
+                style={{
+                  marginTop: '0.5rem',
+                  backgroundColor: '#8b5cf6',
+                  borderColor: '#7c3aed',
+                  opacity: isSubmitting || submitCooldown > 0 ? 0.6 : 1,
+                  cursor: isSubmitting || submitCooldown > 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
               >
-                <Send size={15} />
-                {isSubmitting ? 'Dispatching...' : 'Dispatch to Moderation Queue'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={15} className="spin-animation" />
+                    <span>Dispatching...</span>
+                  </>
+                ) : submitCooldown > 0 ? (
+                  <span>Please wait ({submitCooldown}s)...</span>
+                ) : (
+                  <>
+                    <Send size={15} />
+                    <span>Dispatch to Moderation Queue</span>
+                  </>
+                )}
               </button>
             </form>
           )}

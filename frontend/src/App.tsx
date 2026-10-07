@@ -22,7 +22,7 @@ import { DevOpsSecurityModal } from './components/DevOpsSecurityModal';
 import { ApiManhwaImporterModal } from './components/ApiManhwaImporterModal';
 import { ToastContainer, type ToastMessage } from './components/Toast';
 import { isSupabaseConfigured } from './lib/supabase';
-import { canModerate, sanitizeText, canContribute } from './lib/validation';
+import { canModerate, sanitizeText, canContribute, checkRateLimit, getRateLimitCooldown } from './lib/validation';
 import { fetchManhwaFromDatabase, fetchUserLibrary, addCommentToDatabase, fetchComments, syncManhwaToDatabase } from './services/supabaseService';
 import { fetchAniListReviews, searchAniListIdByTitle } from './services/anilistService';
 import { fetchMangaUpdatesReviews } from './services/mangaUpdatesService';
@@ -464,22 +464,65 @@ export function App() {
   };
 
   /* ================= Contributor Hub Handlers ================= */
-  const handleProposeDraft = (draftData: Omit<ContributorDraft, 'id' | 'submission_date' | 'moderation_status'>) => {
+  const handleProposeDraft = (draftData: Omit<ContributorDraft, 'id' | 'submission_date' | 'moderation_status'>): boolean => {
+    const trimmedTitle = draftData.title.trim().toLowerCase();
+
+    // 1. Duplicate check: is this title already pending in drafts?
+    const alreadyPending = drafts.some(
+      (d) => d.moderation_status === 'pending' && d.title.trim().toLowerCase() === trimmedTitle
+    );
+    if (alreadyPending) {
+      addToast('Already Pending', `A proposal for "${draftData.title}" is already awaiting moderation.`, 'warning');
+      return false;
+    }
+
+    // 2. Duplicate check: is this title already published in the catalog?
+    const alreadyInCatalog = manhwaList.some(
+      (m) => m.title.trim().toLowerCase() === trimmedTitle
+    );
+    if (alreadyInCatalog) {
+      addToast('Already in Catalog', `"${draftData.title}" is already in the official catalog.`, 'info');
+      return false;
+    }
+
+    // 3. Anti-spam throttle: max 1 proposal per 1.5s
+    if (!checkRateLimit(`draft-throttle-${currentUser.id}`, 1, 1500)) {
+      addToast('Please Wait', 'Please slow down between submissions.', 'warning');
+      return false;
+    }
+
+    // 4. Rate-limit window: max 5 proposals per 2 minutes
+    if (!checkRateLimit(`draft-submit-${currentUser.id}`, 5, 120_000)) {
+      const cooldown = getRateLimitCooldown(`draft-submit-${currentUser.id}`, 120_000);
+      addToast('Rate Limited', `Limit reached. Please wait ${cooldown}s before proposing again.`, 'error');
+      return false;
+    }
+
     const newDraft: ContributorDraft = {
       ...draftData,
-      id: `draft-${Date.now()}`,
+      id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       submission_date: new Date().toISOString(),
       moderation_status: 'pending',
     };
     setDrafts(prev => [newDraft, ...prev]);
-    addToast('Draft Proposed', 'Sent to the Moderator Queue for verification.', 'success');
+    logAuditAction('DRAFT_PROPOSED', 'ContributorDraft', newDraft.id, { title: draftData.title });
+    addToast('Draft Proposed', `"${draftData.title}" submitted to Moderator Queue.`, 'success');
+    return true;
   };
 
-  const handleAddManhwaDirectly = (manhwa: Manhwa) => {
-    // Check if duplicate title already exists
-    if (manhwaList.some(m => m.id === manhwa.id || m.title.toLowerCase().trim() === manhwa.title.toLowerCase().trim())) {
+  const handleAddManhwaDirectly = (manhwa: Manhwa): boolean => {
+    const trimmedTitle = manhwa.title.trim().toLowerCase();
+
+    // 1. Duplicate check
+    if (manhwaList.some(m => m.id === manhwa.id || m.title.trim().toLowerCase() === trimmedTitle)) {
       addToast('Already in Catalog', `"${manhwa.title}" is already present in the catalog.`, 'info');
-      return;
+      return false;
+    }
+
+    // 2. Throttle
+    if (!checkRateLimit(`admin-add-${currentUser.id}`, 1, 1000)) {
+      addToast('Please Wait', 'Processing previous entry, please do not spam click.', 'warning');
+      return false;
     }
 
     setManhwaList(prev => [manhwa, ...prev]);
@@ -493,6 +536,7 @@ export function App() {
     if (isSupabaseConfigured) {
       syncManhwaToDatabase([manhwa]).catch(err => console.error('Supabase sync error:', err));
     }
+    return true;
   };
 
   const handleApproveDraft = (draftId: string) => {
@@ -1158,6 +1202,7 @@ export function App() {
             currentRole={currentRole}
             currentUserId={currentUser.id}
             currentUsername={currentUser.username}
+            existingTitles={manhwaList.map((m) => m.title)}
             onProposeDraft={handleProposeDraft}
             onOpenApiImporter={() => setIsApiImporterOpen(true)}
             onAddDirectly={handleAddManhwaDirectly}
@@ -1254,6 +1299,7 @@ export function App() {
         currentUserId={currentUser.id}
         currentUsername={currentUser.username}
         existingTitles={manhwaList.map((m) => m.title)}
+        pendingDraftTitles={drafts.filter((d) => d.moderation_status === 'pending').map((d) => d.title)}
         onAddDirectly={handleAddManhwaDirectly}
         onProposeDraft={handleProposeDraft}
         onSelectForManualForm={(m) => {

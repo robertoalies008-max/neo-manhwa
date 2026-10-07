@@ -155,4 +155,87 @@ describe('ApiManhwaImporterModal Component', () => {
       })
     );
   });
+
+  it('prevents spam clicking by throttling and disabling button on proposal', async () => {
+    const handleProposeDraft = vi.fn();
+
+    render(
+      <ApiManhwaImporterModal
+        {...defaultProps}
+        currentRole="contributor"
+        onProposeDraft={handleProposeDraft}
+      />
+    );
+
+    const input = screen.getByPlaceholderText(/Search series by title/i);
+    fireEvent.change(input, { target: { value: 'Solo' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByText('The Beginning After The End')).toBeInTheDocument();
+    });
+
+    const proposeBtn = screen.getAllByRole('button', { name: /Propose to Queue/i })[0];
+
+    // Rapid spam clicks (simulate 5 fast clicks)
+    fireEvent.click(proposeBtn);
+    fireEvent.click(proposeBtn);
+    fireEvent.click(proposeBtn);
+    fireEvent.click(proposeBtn);
+    fireEvent.click(proposeBtn);
+
+    // Should only be called once
+    expect(handleProposeDraft).toHaveBeenCalledTimes(1);
+
+    // Button should now be disabled and reflect 'In Queue' state
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /In Queue/i })[0]).toBeDisabled();
+    });
+  });
+
+  it('disables actions and displays In Catalog when series is already in catalog', async () => {
+    render(
+      <ApiManhwaImporterModal
+        {...defaultProps}
+        existingTitles={['The Beginning After The End']}
+        currentRole="contributor"
+      />
+    );
+
+    const input = screen.getByPlaceholderText(/Search series by title/i);
+    fireEvent.change(input, { target: { value: 'Solo' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByText('The Beginning After The End')).toBeInTheDocument();
+    });
+
+    // The button for TBATE should show 'In Catalog' and be disabled
+    const catalogBtn = screen.getByRole('button', { name: /In Catalog/i });
+    expect(catalogBtn).toBeInTheDocument();
+    expect(catalogBtn).toBeDisabled();
+  });
+
+  it('disables actions and displays In Queue when series is in pending drafts', async () => {
+    render(
+      <ApiManhwaImporterModal
+        {...defaultProps}
+        pendingDraftTitles={['The Beginning After The End']}
+        currentRole="contributor"
+      />
+    );
+
+    const input = screen.getByPlaceholderText(/Search series by title/i);
+    fireEvent.change(input, { target: { value: 'Solo' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByText('The Beginning After The End')).toBeInTheDocument();
+    });
+
+    // The button for TBATE should show 'In Queue' and be disabled
+    const queueBtn = screen.getByRole('button', { name: /In Queue/i });
+    expect(queueBtn).toBeInTheDocument();
+    expect(queueBtn).toBeDisabled();
+  });
 });
