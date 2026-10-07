@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { sanitizeText } from '../lib/validation';
 import type { Manhwa, UserLibraryEntry, Comment, Report, ContributorDraft } from '../types';
 
 /**
@@ -164,12 +165,17 @@ export async function fetchComments(manhwaId: string): Promise<Comment[] | null>
 }
 
 /**
- * Submits a report to Supabase.
+ * Submits a report to Supabase with defense-in-depth sanitization.
  */
 export async function submitReportToDatabase(report: Partial<Report>): Promise<boolean> {
   if (!isSupabaseConfigured) return false;
   try {
-    const { error } = await supabase.from('reports').insert(report);
+    const payload = {
+      ...report,
+      details: sanitizeText(report.details || ''),
+      target_preview: sanitizeText(report.target_preview || ''),
+    };
+    const { error } = await supabase.from('reports').insert(payload);
     if (error) {
       console.error('Error submitting report to Supabase:', error.message);
       return false;
@@ -181,12 +187,18 @@ export async function submitReportToDatabase(report: Partial<Report>): Promise<b
 }
 
 /**
- * Submits a contributor draft to Supabase.
+ * Submits a contributor draft to Supabase with defense-in-depth sanitization.
  */
 export async function submitDraftToDatabase(draft: Partial<ContributorDraft>): Promise<boolean> {
   if (!isSupabaseConfigured) return false;
   try {
-    const { error } = await supabase.from('contributor_drafts').insert(draft);
+    const payload = {
+      ...draft,
+      title: sanitizeText(draft.title || ''),
+      hangul: sanitizeText(draft.hangul || ''),
+      synopsis: sanitizeText(draft.synopsis || ''),
+    };
+    const { error } = await supabase.from('contributor_drafts').insert(payload);
     if (error) {
       console.error('Error submitting draft to Supabase:', error.message);
       return false;
@@ -205,7 +217,7 @@ export async function addCommentToDatabase(comment: Partial<Comment>): Promise<b
       manhwa_id: comment.manhwa_id,
       user_id: comment.user_id,
       parent_id: comment.parent_id || null,
-      content: comment.content,
+      content: sanitizeText(comment.content || ''),
       is_spoiler: comment.is_spoiler || false,
       upvotes: 0,
       downvotes: 0,

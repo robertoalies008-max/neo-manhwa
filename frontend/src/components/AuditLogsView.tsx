@@ -1,13 +1,14 @@
 import React from 'react';
-import { Activity, Lock } from 'lucide-react';
+import { Activity, Lock, ShieldCheck } from 'lucide-react';
 import type { AuditLog, UserRole } from '../types';
 
 interface AuditLogsViewProps {
   logs: AuditLog[];
   currentRole: UserRole;
+  onOpenSecurityModal?: () => void;
 }
 
-export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ logs, currentRole }) => {
+export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ logs, currentRole, onOpenSecurityModal }) => {
   if (currentRole !== 'moderator' && currentRole !== 'admin') {
     return (
       <div style={{ maxWidth: '800px', margin: '4rem auto', textAlign: 'center', padding: '2rem' }}>
@@ -27,16 +28,42 @@ export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ logs, currentRole 
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'inline-block', marginBottom: '0.4rem' }}>
-          <span className={`badge badge-role-${currentRole}`}>
-            {currentRole === 'admin' ? 'Tamper-Evident Full Audit Ledger' : 'Moderator Scoped Activity Logs'}
-          </span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
+        <div>
+          <div style={{ display: 'inline-block', marginBottom: '0.4rem' }}>
+            <span className={`badge badge-role-${currentRole}`}>
+              {currentRole === 'admin' ? 'Tamper-Evident Full Audit Ledger' : 'Moderator Scoped Activity Logs'}
+            </span>
+          </div>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ffffff' }}>System Audit & Security Logs</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            Immutable record of administrative actions, content mutations, and privilege reconfigurations.
+          </p>
         </div>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ffffff' }}>System Audit & Security Logs</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-          Immutable record of administrative actions, content mutations, and privilege reconfigurations.
-        </p>
+
+        {onOpenSecurityModal && (
+          <button
+            onClick={onOpenSecurityModal}
+            className="btn btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              padding: '0.65rem 1.1rem',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              boxShadow: '0 0 20px rgba(37, 99, 235, 0.35)',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <ShieldCheck size={18} />
+            <span>DevSecOps Security Console</span>
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>

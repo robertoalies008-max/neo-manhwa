@@ -467,10 +467,11 @@ INSERT INTO audit_logs (id, actor_id, actor_role, action, target_entity, target_
 ('70000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'admin', 'MANHWA_METADATA_UPDATE', 'Manhwa', '10000000-0000-0000-0000-000000000001', '{"total_chapters": {"old": 56, "new": 58}}'::jsonb, '192.168.1.100', '2026-10-03 09:00:00+00');
 
 -- ==========================================================
--- 14. ROW LEVEL SECURITY (RLS) & API SECURITY
+-- ==========================================================
+-- 14. ROW LEVEL SECURITY (RLS) & ENTERPRISE ACCESS CONTROL
 -- ==========================================================
 
--- Enable RLS on all public tables
+-- Enable RLS on all public tables (Default Deny)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE manhwa ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_library ENABLE ROW LEVEL SECURITY;
@@ -480,27 +481,77 @@ ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contributor_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Manhwa: Anyone can read, only Admins can write
+-- 1. Manhwa Policies: Public read, Admin write
 CREATE POLICY "Public manhwa are viewable by everyone" ON manhwa FOR SELECT USING (is_published = true);
 CREATE POLICY "Admins can manage manhwa" ON manhwa FOR ALL USING (
   (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
 );
 
--- Users: Anyone can view profiles, users update their own, Admins manage all
-CREATE POLICY "Public user profiles are viewable by everyone" ON users FOR SELECT USING (true);
+-- 2. Users Table Security: Prevent password_hash exposure
+-- Safe Public Profile View (Excludes password_hash and private security flags)
+CREATE OR REPLACE VIEW public_profiles AS
+  SELECT id, username, avatar_url, role, created_at
+  FROM users
+  WHERE deleted_at IS NULL AND is_banned = FALSE;
+
+CREATE POLICY "Users can view own account details or Admins view all" ON users FOR SELECT USING (
+  auth.uid() = id OR (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
+);
 CREATE POLICY "Users can update their own profile (except role)" ON users FOR UPDATE USING (auth.uid() = id) WITH CHECK (role = (SELECT role FROM users WHERE id = auth.uid()));
 CREATE POLICY "Admins can manage all users" ON users FOR ALL USING (
   (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
 );
 
--- Comments: Anyone can read, users create, authors/mods/admins manage
-CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (true);
-CREATE POLICY "Users can insert comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can edit their own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Moderators and Admins can manage comments" ON comments FOR UPDATE USING (
+-- 3. User Library Policies (Per-user private tracking)
+CREATE POLICY "Users can view their own library" ON user_library FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can add to their own library" ON user_library FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own library entries" ON user_library FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can remove from their own library" ON user_library FOR DELETE USING (auth.uid() = user_id);
+
+-- 4. Comments Policies: Public read, Author edit, Staff moderate, Admin purge
+CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (deleted_at IS NULL);
+CREATE POLICY "Authenticated users can insert comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Authors can edit their own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Moderators and Admins can moderate comments" ON comments FOR UPDATE USING (
   (SELECT role FROM users WHERE id = auth.uid()) IN ('moderator', 'admin')
 );
-CREATE POLICY "Only admins can hard delete comments" ON comments FOR DELETE USING (
+CREATE POLICY "Only admins can permanently delete comments" ON comments FOR DELETE USING (
   (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
 );
+
+-- 5. Comment Votes Policies
+CREATE POLICY "Votes are viewable by everyone" ON comment_votes FOR SELECT USING (true);
+CREATE POLICY "Users can cast own votes" ON comment_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can change own votes" ON comment_votes FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can withdraw own votes" ON comment_votes FOR DELETE USING (auth.uid() = user_id);
+
+-- 6. Moderation Reports Policies (Confidential reporting pipeline)
+CREATE POLICY "Users can submit reports" ON reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+CREATE POLICY "Staff can view moderation reports" ON reports FOR SELECT USING (
+  (SELECT role FROM users WHERE id = auth.uid()) IN ('moderator', 'admin')
+);
+CREATE POLICY "Staff can update report resolution status" ON reports FOR UPDATE USING (
+  (SELECT role FROM users WHERE id = auth.uid()) IN ('moderator', 'admin')
+);
+
+-- 7. Contributor Drafts Policies (Submission & approval lifecycle)
+CREATE POLICY "Contributors can view own drafts" ON contributor_drafts FOR SELECT USING (
+  auth.uid() = contributor_id OR (SELECT role FROM users WHERE id = auth.uid()) IN ('moderator', 'admin')
+);
+CREATE POLICY "Contributors can submit drafts" ON contributor_drafts FOR INSERT WITH CHECK (
+  auth.uid() = contributor_id AND (SELECT role FROM users WHERE id = auth.uid()) IN ('contributor', 'moderator', 'admin')
+);
+CREATE POLICY "Staff can review and update draft status" ON contributor_drafts FOR UPDATE USING (
+  (SELECT role FROM users WHERE id = auth.uid()) IN ('moderator', 'admin')
+);
+
+-- 8. Audit Logs Policies (Tamper-evident, immutable, append-only)
+CREATE POLICY "Admins can inspect audit logs" ON audit_logs FOR SELECT USING (
+  (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
+);
+CREATE POLICY "System and staff can record audit events" ON audit_logs FOR INSERT WITH CHECK (true);
+-- CRITICAL SECURITY GUARANTEE:
+-- Explicitly NO UPDATE or DELETE policies are granted on audit_logs.
+-- Audit logs are strictly immutable and tamper-evident.
+
 

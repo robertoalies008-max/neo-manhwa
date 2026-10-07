@@ -15,6 +15,7 @@ interface NavbarProps {
   onOpenAuth: (mode: 'signin' | 'signup') => void;
   onLogout: () => void;
   onSelectManhwa: (m: Manhwa) => void;
+  onOpenSecurityTester?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onLogout,
   onSelectManhwa,
+  onOpenSecurityTester,
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -333,6 +335,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 style={{ color: activeTab === 'users' ? '#f43f5e' : 'var(--text-secondary)' }}
               >
                 Users
+              </button>
+            )}
+
+            {onOpenSecurityTester && (currentRole === 'moderator' || currentRole === 'admin') && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={onOpenSecurityTester}
+                title="Launch DevSecOps Penetration Testing Console"
+                style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <Shield size={13} color="#38bdf8" />
+                <span>Security</span>
               </button>
             )}
           </nav>

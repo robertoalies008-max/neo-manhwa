@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:security": "vitest run src/lib/security.test.ts",
+    "security:audit": "tsx src/scripts/securityAuditCli.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

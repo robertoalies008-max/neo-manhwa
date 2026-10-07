@@ -18,9 +18,10 @@ import { UserManagement } from './components/UserManagement';
 import { AuthModal } from './components/AuthModal';
 import { ReportModal } from './components/ReportModal';
 import { LoadingScreen } from './components/LoadingScreen';
+import { DevOpsSecurityModal } from './components/DevOpsSecurityModal';
 import { ToastContainer, type ToastMessage } from './components/Toast';
 import { isSupabaseConfigured } from './lib/supabase';
-import { canModerate } from './lib/validation';
+import { canModerate, sanitizeText } from './lib/validation';
 import { fetchManhwaFromDatabase, fetchUserLibrary, addCommentToDatabase, fetchComments } from './services/supabaseService';
 import { fetchAniListReviews, searchAniListIdByTitle } from './services/anilistService';
 import { fetchMangaUpdatesReviews } from './services/mangaUpdatesService';
@@ -40,6 +41,7 @@ export function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
   const [drafts, setDrafts] = useState<ContributorDraft[]>(INITIAL_CONTRIBUTOR_DRAFTS);
   const [usersList, setUsersList] = useState<User[]>(INITIAL_USER_LIST);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
 
   // In-app Toasts (hoisted for early availability)
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -332,6 +334,8 @@ export function App() {
       return;
     }
 
+    const cleanContent = sanitizeText(content);
+
     const newComment: Comment = {
       id: `c-${Date.now()}`,
       manhwa_id: manhwaId,
@@ -340,7 +344,7 @@ export function App() {
       user_avatar: currentUser.avatar_url,
       user_role: currentRole,
       parent_id: parentId,
-      content,
+      content: cleanContent,
       is_spoiler: isSpoiler,
       upvotes: 0,
       downvotes: 0,
@@ -356,7 +360,7 @@ export function App() {
          manhwa_id: manhwaId,
          user_id: currentUser.id,
          parent_id: parentId,
-         content,
+         content: cleanContent,
          is_spoiler: isSpoiler,
       });
     }
@@ -659,6 +663,7 @@ export function App() {
         onOpenAuth={(mode) => setAuthModal({ isOpen: true, mode })}
         onLogout={handleLogout}
         onSelectManhwa={setSelectedManhwa}
+        onOpenSecurityTester={() => setIsSecurityModalOpen(true)}
       />
 
       {/* Main Tab Content */}
@@ -1119,6 +1124,7 @@ export function App() {
           <AuditLogsView
             logs={auditLogs}
             currentRole={currentRole}
+            onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
           />
         )}
         {/* Tab 6: User Management */}
@@ -1174,6 +1180,12 @@ export function App() {
         reporterId={currentUser.id}
         onClose={() => setReportModal({ ...reportModal, isOpen: false })}
         onSubmitReport={handleSubmitReport}
+      />
+
+      {/* Modal: DevSecOps Penetration Testing Console */}
+      <DevOpsSecurityModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
       />
 
 

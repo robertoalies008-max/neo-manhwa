@@ -1,0 +1,339 @@
+{
+  "timestamp": "2026-10-07T13:35:07.696Z",
+  "scanDurationMs": 4,
+  "totalTests": 24,
+  "passedCount": 24,
+  "failedCount": 0,
+  "securityScore": 100,
+  "letterGrade": "A+",
+  "cvssEstimatedScore": 0,
+  "suiteSummaries": {
+    "SQL_INJECTION": {
+      "total": 7,
+      "passed": 7,
+      "failed": 0
+    },
+    "XSS": {
+      "total": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "RBAC_BOLA": {
+      "total": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    "INPUT_FUZZING": {
+      "total": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    "RATE_LIMIT": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "RLS_SCHEMA": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "results": [
+    {
+      "id": "SQLI-001",
+      "name": "Classic Boolean Tautology Auth Bypass",
+      "category": "SQL_INJECTION",
+      "severity": "CRITICAL",
+      "payload": "' OR '1'='1",
+      "passed": true,
+      "expectedBehavior": "Flagged as suspicious SQLi and rejected by validation",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.63,
+      "mitigation": "Parameterized SQL statements and heuristic input detection filter."
+    },
+    {
+      "id": "SQLI-002",
+      "name": "Inline Comment Truncation Attack",
+      "category": "SQL_INJECTION",
+      "severity": "CRITICAL",
+      "payload": "admin' --",
+      "passed": true,
+      "expectedBehavior": "Flagged by SQL comment pattern detector (--)",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.14,
+      "mitigation": "Detect and neutralize SQL comment markers in raw user input."
+    },
+    {
+      "id": "SQLI-003",
+      "name": "Stacked Query Execution (CWE-89)",
+      "category": "SQL_INJECTION",
+      "severity": "CRITICAL",
+      "payload": "1; DROP TABLE manhwa; --",
+      "passed": true,
+      "expectedBehavior": "Flagged by stacked query detector (DROP TABLE) and blocked",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.06,
+      "mitigation": "Prohibit stacked queries and strip multi-statement delimiters."
+    },
+    {
+      "id": "SQLI-004",
+      "name": "Union-Based Credential Exfiltration",
+      "category": "SQL_INJECTION",
+      "severity": "CRITICAL",
+      "payload": "' UNION SELECT null, username, password_hash FROM users --",
+      "passed": true,
+      "expectedBehavior": "Flagged by UNION SELECT signature detector",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.03,
+      "mitigation": "Block UNION-based clauses; query only through strongly-typed ORM."
+    },
+    {
+      "id": "SQLI-005",
+      "name": "Time-Based Blind PostgreSQL Injection",
+      "category": "SQL_INJECTION",
+      "severity": "HIGH",
+      "payload": "Solo'; SELECT pg_sleep(5); --",
+      "passed": true,
+      "expectedBehavior": "Flagged by database sleep function detector (pg_sleep)",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.02,
+      "mitigation": "Filter dynamic sleep/delay invocations and enforce strict types."
+    },
+    {
+      "id": "SQLI-006",
+      "name": "PostgREST Filter Operator Tampering",
+      "category": "SQL_INJECTION",
+      "severity": "HIGH",
+      "payload": "action,id.gt.0,role.eq.admin",
+      "passed": true,
+      "expectedBehavior": "PostgREST filter delimiter characters (,) stripped safely",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.06,
+      "mitigation": "Use sanitizeSqlFilter to escape delimiters before passing to PostgREST."
+    },
+    {
+      "id": "SQLI-007",
+      "name": "SQL Injection in Email Address Field",
+      "category": "SQL_INJECTION",
+      "severity": "HIGH",
+      "payload": "admin' OR 1=1--@neomanhwa.internal",
+      "passed": true,
+      "expectedBehavior": "Email validation rejects address with SQL injection metacharacters",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.07,
+      "mitigation": "RFC 5322 validation coupled with detectSqlInjection."
+    },
+    {
+      "id": "XSS-001",
+      "name": "Direct Script Tag Injection",
+      "category": "XSS",
+      "severity": "CRITICAL",
+      "payload": "<script>alert('XSS')</script>",
+      "passed": true,
+      "expectedBehavior": "All <script> tags and inner code stripped",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.45,
+      "mitigation": "Multi-pass HTML tag stripper (sanitizeText)."
+    },
+    {
+      "id": "XSS-002",
+      "name": "Recursive Nested Tag Bypass (CWE-182)",
+      "category": "XSS",
+      "severity": "CRITICAL",
+      "payload": "<<SCRIPT>alert(1);//<</SCRIPT>",
+      "passed": true,
+      "expectedBehavior": "Recursive tag stripper collapses nested tags completely",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.04,
+      "mitigation": "Multi-pass loop until sanitized output reaches fixed-point."
+    },
+    {
+      "id": "XSS-003",
+      "name": "Inline Event Handler Injection (IMG onerror)",
+      "category": "XSS",
+      "severity": "HIGH",
+      "payload": "<img src=\"invalid_img\" onerror=\"alert(document.domain)\">",
+      "passed": true,
+      "expectedBehavior": "Inline event handler and img tag eliminated",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.02,
+      "mitigation": "Regex-based stripping of on* attributes and tag removal."
+    },
+    {
+      "id": "XSS-004",
+      "name": "SVG Vector with Inline Handler",
+      "category": "XSS",
+      "severity": "HIGH",
+      "payload": "<svg/onload=alert('XSS')>",
+      "passed": true,
+      "expectedBehavior": "SVG element and onload attribute neutralized",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.02,
+      "mitigation": "Strip XML/SVG elements and event attributes."
+    },
+    {
+      "id": "XSS-005",
+      "name": "Dangerous Pseudo-Protocol Injection (javascript:)",
+      "category": "XSS",
+      "severity": "CRITICAL",
+      "payload": "javascript:alert('Exploit')",
+      "passed": true,
+      "expectedBehavior": "javascript: protocol prefix stripped from input",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.02,
+      "mitigation": "Strip javascript:, vbscript:, and data: schemes."
+    },
+    {
+      "id": "XSS-006",
+      "name": "HTML Entity Escaping Integrity",
+      "category": "XSS",
+      "severity": "MEDIUM",
+      "payload": "<div class=\"banner\">Click & Win</div>",
+      "passed": true,
+      "expectedBehavior": "HTML metacharacters (<, >, \", &) converted to safe entities",
+      "observedBehavior": "Defended: Neutralized successfully",
+      "latencyMs": 0.07,
+      "mitigation": "Always escape dynamic values rendered into raw DOM."
+    },
+    {
+      "id": "RBAC-001",
+      "name": "Guest Privilege Escalation Guard (Comment Authoring)",
+      "category": "RBAC_BOLA",
+      "severity": "HIGH",
+      "payload": "Role: 'guest' attempting write operations",
+      "passed": true,
+      "expectedBehavior": "Guest role denied all authoring and moderation permissions",
+      "observedBehavior": "Defended: RBAC boundary enforced",
+      "latencyMs": 0.03,
+      "mitigation": "Strict isAuthenticated() and hasMinimumRole() guards."
+    },
+    {
+      "id": "RBAC-002",
+      "name": "Standard User Moderation Queue Access Restriction",
+      "category": "RBAC_BOLA",
+      "severity": "HIGH",
+      "payload": "Role: 'user' attempting moderation actions",
+      "passed": true,
+      "expectedBehavior": "Standard user cannot access or perform moderation",
+      "observedBehavior": "Defended: RBAC boundary enforced",
+      "latencyMs": 0.01,
+      "mitigation": "canModerate() role hierarchy guard."
+    },
+    {
+      "id": "RBAC-003",
+      "name": "Contributor Publishing Boundary Guard",
+      "category": "RBAC_BOLA",
+      "severity": "MEDIUM",
+      "payload": "Role: 'contributor' submitting drafts vs moderating",
+      "passed": true,
+      "expectedBehavior": "Contributor can submit drafts but cannot approve or moderate",
+      "observedBehavior": "Defended: RBAC boundary enforced",
+      "latencyMs": 0.01,
+      "mitigation": "Separation of draft submission and draft approval roles."
+    },
+    {
+      "id": "RBAC-004",
+      "name": "Moderator Hard-Delete Restriction (Admin Only)",
+      "category": "RBAC_BOLA",
+      "severity": "CRITICAL",
+      "payload": "Role: 'moderator' attempting hard-delete",
+      "passed": true,
+      "expectedBehavior": "Moderator cannot execute admin-exclusive hard-delete actions",
+      "observedBehavior": "Defended: RBAC boundary enforced",
+      "latencyMs": 0.02,
+      "mitigation": "Enforce currentRole === \"admin\" on permanent destructive actions."
+    },
+    {
+      "id": "FUZZ-001",
+      "name": "Buffer Overflow / Mega-Payload Fuzzing (50,000 chars)",
+      "category": "INPUT_FUZZING",
+      "severity": "MEDIUM",
+      "payload": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA... [truncated]",
+      "passed": true,
+      "expectedBehavior": "Payload exceeding max bounds safely rejected with length error",
+      "observedBehavior": "Defended: Safely constrained",
+      "latencyMs": 0.98,
+      "mitigation": "Hard maximum character length checks prior to processing."
+    },
+    {
+      "id": "FUZZ-002",
+      "name": "Null-Byte and Control Character Neutralization",
+      "category": "INPUT_FUZZING",
+      "severity": "HIGH",
+      "payload": "Hunter\u0000Name\bPayload\u001fTest... [truncated]",
+      "passed": true,
+      "expectedBehavior": "Null bytes and unprintable control characters stripped",
+      "observedBehavior": "Defended: Safely constrained",
+      "latencyMs": 0.03,
+      "mitigation": "Sanitize null bytes to prevent C-string termination attacks."
+    },
+    {
+      "id": "FUZZ-003",
+      "name": "Short Input Boundary Rejection",
+      "category": "INPUT_FUZZING",
+      "severity": "LOW",
+      "payload": "   ... [truncated]",
+      "passed": true,
+      "expectedBehavior": "Whitespace-only inputs rejected across all validators",
+      "observedBehavior": "Defended: Safely constrained",
+      "latencyMs": 0.06,
+      "mitigation": "Trim and assert minimum non-empty character limits."
+    },
+    {
+      "id": "FUZZ-004",
+      "name": "Weak Password Complexity Rejection",
+      "category": "INPUT_FUZZING",
+      "severity": "MEDIUM",
+      "payload": "hunter123... [truncated]",
+      "passed": true,
+      "expectedBehavior": "Password missing required character classes rejected",
+      "observedBehavior": "Defended: Safely constrained",
+      "latencyMs": 0.05,
+      "mitigation": "Enforce uppercase, lowercase, numeric and length requirements."
+    },
+    {
+      "id": "RATE-001",
+      "name": "High-Velocity Burst Throttling (Anti-Brute-Force)",
+      "category": "RATE_LIMIT",
+      "severity": "HIGH",
+      "payload": "10 rapid requests within 5-attempt limit window",
+      "passed": true,
+      "expectedBehavior": "Exactly 5 requests allowed; remaining 5 rejected with active cooldown",
+      "observedBehavior": "Defended: Rate limit strictly enforced",
+      "latencyMs": 0.12,
+      "mitigation": "Sliding window rate limiter tracking attempt velocity."
+    },
+    {
+      "id": "RLS-001",
+      "name": "All Public Tables Require Row Level Security (RLS)",
+      "category": "RLS_SCHEMA",
+      "severity": "CRITICAL",
+      "payload": "8 Tables: users, manhwa, library, comments, votes, reports, drafts, audit",
+      "passed": true,
+      "expectedBehavior": "RLS configured with explicit granular policies per table",
+      "observedBehavior": "Defended: Schema complies with security standards",
+      "latencyMs": 0.01,
+      "mitigation": "ENABLE ROW LEVEL SECURITY with SELECT/INSERT/UPDATE/DELETE policies."
+    },
+    {
+      "id": "RLS-002",
+      "name": "Audit Logs Immutability (Append-Only Ledger Guarantee)",
+      "category": "RLS_SCHEMA",
+      "severity": "HIGH",
+      "payload": "DROP/UPDATE policies on audit_logs table",
+      "passed": true,
+      "expectedBehavior": "Zero UPDATE or DELETE policies exist for audit_logs table",
+      "observedBehavior": "Defended: Schema complies with security standards",
+      "latencyMs": 0.01,
+      "mitigation": "Tamper-evident append-only ledger pattern."
+    }
+  ],
+  "recommendations": [
+    "Maintain parameterized queries for all database client calls (inherent in Supabase client).",
+    "Ensure multi-pass recursive sanitization runs on every user-generated content boundary.",
+    "Enforce Row Level Security (RLS) on all PostgreSQL tables with explicit restrictive policies.",
+    "Hide sensitive columns (e.g. password_hash, tokens) behind secure PostgreSQL public views.",
+    "Apply sliding-window rate limits to sensitive mutation endpoints (comments, reports, authentication)."
+  ]
+}
